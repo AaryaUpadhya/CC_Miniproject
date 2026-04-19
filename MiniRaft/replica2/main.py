@@ -130,15 +130,13 @@ def become_leader():
     global state, leader_id, heartbeat_task, next_index, match_index
     state = State.LEADER
     leader_id = REPLICA_ID
-    # Initialize leader volatile state
     for peer in PEER_ADDRESSES:
         next_index[peer] = len(log)
         match_index[peer] = -1
     logger.info(f"[{REPLICA_ID}] LEADER (term={current_term})")
-    # Notify gateway
     asyncio.create_task(notify_gateway_leader())
-    # Start heartbeats
-    heartbeat_task = asyncio.create_task(send_heartbeats())
+    # ✅ Send first heartbeat immediately, then start the loop
+    asyncio.create_task(_become_leader_and_heartbeat())
 
 
 async def notify_gateway_leader():
@@ -151,6 +149,12 @@ async def notify_gateway_leader():
             )
         except Exception as e:
             logger.warning(f"Could not notify gateway: {e}")
+
+async def _become_leader_and_heartbeat():
+    """Send immediate first heartbeat, then start the regular loop."""
+    await asyncio.gather(*[send_append_entries(peer) for peer in PEER_ADDRESSES])
+    global heartbeat_task
+    heartbeat_task = asyncio.create_task(send_heartbeats())
 
 
 # ─── Election Logic ─────────────────────────────────────────────
@@ -197,10 +201,12 @@ async def start_election():
 async def send_heartbeats():
     """Leader sends periodic heartbeats (AppendEntries) to all peers."""
     while state == State.LEADER:
+        await asyncio.sleep(HEARTBEAT_INTERVAL / 1000.0)
+        if state != State.LEADER:
+            break
         await asyncio.gather(*[
             send_append_entries(peer) for peer in PEER_ADDRESSES
         ])
-        await asyncio.sleep(HEARTBEAT_INTERVAL / 1000.0)
 
 
 async def send_append_entries(peer: str):
@@ -277,30 +283,25 @@ async def notify_commit(index: int):
 # ─── Election Timer ─────────────────────────────────────────────
 
 async def election_timer_loop():
-    """Background task: triggers election if heartbeat times out."""
     while True:
-        # Calculate timeout once at start of cycle
         timeout = random.randint(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX) / 1000.0
-        timeout_start = time.time()
+        deadline = last_heartbeat + timeout  # absolute deadline based on last heartbeat
 
-        # Check frequently (every 50ms) instead of sleeping once
         while True:
-            await asyncio.sleep(0.05)  # Check every 50ms
+            await asyncio.sleep(0.05)
 
-            # Leaders don't timeout
             if state == State.LEADER:
                 break
 
-            # Calculate elapsed time since last heartbeat
-            elapsed = time.time() - last_heartbeat
+            # If we got a new heartbeat, recalculate deadline
+            new_deadline = last_heartbeat + timeout
+            if new_deadline > deadline:
+                deadline = new_deadline
 
-            # If enough time has passed, trigger election
-            if elapsed >= timeout:
-                logger.warning(f"[{REPLICA_ID}] ELECTION TIMEOUT (elapsed={elapsed:.3f}s >= {timeout:.3f}s). Starting election...")
+            if time.time() >= deadline:
+                logger.warning(f"[{REPLICA_ID}] ELECTION TIMEOUT. Starting election...")
                 await start_election()
-                break  # Recalculate timeout
-
-
+                break
 # ─── RPC Endpoints ───────────────────────────────────────────────
 
 @app.post("/request-vote")
