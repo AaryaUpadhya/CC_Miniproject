@@ -101,7 +101,7 @@ def get_last_log_term() -> int:
 def reset_election_timer():
     global last_heartbeat
     last_heartbeat = time.time()
-    logger.debug(f"⏰ Election timer reset")
+    logger.debug(f"Election timer reset")
 
 def become_follower(term: int, new_leader: Optional[int] = None):
     global state, current_term, voted_for, leader_id, heartbeat_task
@@ -115,9 +115,9 @@ def become_follower(term: int, new_leader: Optional[int] = None):
         heartbeat_task.cancel()
         heartbeat_task = None
     if was_leader:
-        logger.info(f"[{REPLICA_ID}] 📉 Stepped down from LEADER → FOLLOWER (term={term}, leader={new_leader})")
+        logger.info(f"[{REPLICA_ID}] Stepped down from LEADER to FOLLOWER (term={term}, leader_id={new_leader})")
     else:
-        logger.info(f"[{REPLICA_ID}] 👤 FOLLOWER (term={term}, leader_id={new_leader})")
+        logger.info(f"[{REPLICA_ID}] FOLLOWER (term={term}, leader_id={new_leader})")
 
 def become_candidate():
     global state, current_term, voted_for
@@ -125,7 +125,7 @@ def become_candidate():
     current_term += 1
     voted_for = REPLICA_ID
     reset_election_timer()
-    logger.info(f"[{REPLICA_ID}] 🗳️  CANDIDATE (term={current_term})")
+    logger.info(f"[{REPLICA_ID}] CANDIDATE (term={current_term})")
 
 def become_leader():
     global state, leader_id, heartbeat_task, next_index, match_index
@@ -135,7 +135,7 @@ def become_leader():
     for peer in PEER_ADDRESSES:
         next_index[peer] = len(log)
         match_index[peer] = -1
-    logger.info(f"[{REPLICA_ID}] 👑 LEADER (term={current_term}) 🎉")
+    logger.info(f"[{REPLICA_ID}] LEADER (term={current_term})")
     # Notify gateway
     asyncio.create_task(notify_gateway_leader())
     # Start heartbeats
@@ -297,7 +297,7 @@ async def election_timer_loop():
 
             # If enough time has passed, trigger election
             if elapsed >= timeout:
-                logger.warning(f"[{REPLICA_ID}] ⏰ ELECTION TIMEOUT (elapsed={elapsed:.3f}s >= {timeout:.3f}s). Starting election...")
+                logger.warning(f"[{REPLICA_ID}] ELECTION TIMEOUT (elapsed={elapsed:.3f}s >= {timeout:.3f}s). Starting election...")
                 await start_election()
                 break  # Recalculate timeout
 
@@ -310,7 +310,7 @@ async def handle_request_vote(req: RequestVoteRequest) -> RequestVoteResponse:
 
     # If requester has higher term, step down
     if req.term > current_term:
-        logger.info(f"[{REPLICA_ID}] 📥 Higher term in vote request: {req.term} > {current_term}. Stepping down.")
+        logger.info(f"[{REPLICA_ID}] Higher term in vote request: {req.term} > {current_term}. Stepping down.")
         become_follower(req.term)
 
     # Decide whether to grant vote
@@ -327,11 +327,11 @@ async def handle_request_vote(req: RequestVoteRequest) -> RequestVoteResponse:
                 voted_for = req.candidate_id
                 reset_election_timer()
                 grant = True
-                logger.info(f"[{REPLICA_ID}] ✅ Voted for replica {req.candidate_id} (term={req.term})")
+                logger.info(f"[{REPLICA_ID}] Voted for replica {req.candidate_id} (term={req.term})")
         else:
-            logger.debug(f"[{REPLICA_ID}] ❌ Reject vote for {req.candidate_id}: already voted for {voted_for} (term={req.term})")
+            logger.debug(f"[{REPLICA_ID}] Reject vote for {req.candidate_id}: already voted for {voted_for}")
     else:
-        logger.debug(f"[{REPLICA_ID}] ❌ Reject vote request: stale term {req.term} < {current_term}")
+        logger.debug(f"[{REPLICA_ID}] Reject vote request: stale term {req.term} < {current_term}")
 
     return RequestVoteResponse(term=current_term, vote_granted=grant)
 
@@ -342,14 +342,15 @@ async def handle_append_entries(req: AppendEntriesRequest) -> AppendEntriesRespo
 
     # Stale term - reject
     if req.term < current_term:
-        logger.debug(f"[{REPLICA_ID}] ❌ Reject AppendEntries: stale term {req.term} < {current_term}")
+        logger.debug(f"[{REPLICA_ID}] Reject AppendEntries: stale term {req.term} < {current_term}")
         return AppendEntriesResponse(term=current_term, success=False)
 
     # Valid leader heartbeat/replication
     is_heartbeat = len(req.entries) == 0
     if is_heartbeat:
-        logger.info(f"[{REPLICA_ID}] ❤️  HEARTBEAT from leader {req.leader_id}, term={req.term}")
+        logger.info(f"[{REPLICA_ID}] HEARTBEAT from leader {req.leader_id}, term={req.term}")
     
+    # CRITICAL: Always become follower and reset election timer on valid heartbeat
     become_follower(req.term, req.leader_id)
 
     # Log consistency check
