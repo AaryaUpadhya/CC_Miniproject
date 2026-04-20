@@ -1,4 +1,4 @@
-# 🎨 Mini-RAFT: Distributed Real-Time Drawing Board
+# Mini-RAFT: Distributed Real-Time Drawing Board
 
 **Mini-RAFT** is a fault-tolerant, real-time collaborative drawing platform built with **Python (FastAPI)** and **React (TypeScript)**. It implements a simplified version of the **RAFT Consensus Algorithm** to ensure that your drawing data (strokes) is replicated across multiple servers with strong consistency.
 
@@ -6,14 +6,14 @@ Even if the "Active Leader" server crashes, the remaining servers will automatic
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 - **3 Replicas (Consensus Engine)**: Python servers that manage the stroke log via RAFT (Follower/Candidate/Leader states).
 - **1 Gateway (Client Proxy)**: A stateless proxy that routes browser WebSocket connections to the current RAFT leader.
 - **1 Frontend (Real-time UI)**: A React/Vite/TypeScript app that renders an HTML5 canvas and cluster status dashboard.
 
 ---
 
-## 🚀 Getting Started (Local Machine)
+## Getting Started (Local Machine)
 
 ### Prerequisites
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (ensure it's running)
@@ -31,7 +31,7 @@ Even if the "Active Leader" server crashes, the remaining servers will automatic
 
 ---
 
-## 🌐 Connecting from Other Systems (Friends)
+## Connecting from Other Systems (Friends)
 Step 1 — Find your IP address
 Open Command Prompt and run:
 ipconfig
@@ -58,7 +58,7 @@ That's it — the app will automatically route their WebSocket traffic back to y
 
 ---
 
-## 🧪 Testing Fault Tolerance (Chaos Mode)
+## Testing Fault Tolerance (Chaos Mode)
 
 The coolest part of this project is seeing the consensus algorithm in action. Try these:
 
@@ -78,7 +78,7 @@ docker stop miniraft-replica1
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 - **Backend Logic**: Python 3.12, FastAPI (Asynchronous IO).
 - **Internal RPCs**: HTTP (Client-to-Leader, Leader-to-Follower).
 - **Client Comm**: WebSockets (Real-time broadcasting).
